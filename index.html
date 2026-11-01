@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Qaida Voices</title>
+<meta name="theme-color" content="#0f5c4d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1d2a27; --muted:#62716d; --line:#dde5e2; --bg:#f5f8f7; --card:#fff; --brand:#0f5c4d; --brand2:#e6f2ee;
+          --ok:#1f7a3a; --warn:#b4570a; --bad:#b3261e; --r:14px; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:var(--bg); }
+  header { background:var(--brand); color:#fff; padding:12px 16px; display:flex; align-items:center; gap:10px; position:sticky; top:0; z-index:5; }
+  header h1 { font-size:18px; margin:0; flex:1; }
+  header button { background:rgba(255,255,255,.15); color:#fff; border:0; border-radius:10px; padding:6px 10px; font-size:14px; }
+  main { max-width:720px; margin:0 auto; padding:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:14px; margin-bottom:12px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .grow { flex:1; min-width:0; }
+  .muted { color:var(--muted); font-size:14px; }
+  .small { font-size:13px; }
+  h2 { font-size:18px; margin:4px 0 12px; }
+  input, select, textarea { font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:#fff; width:100%; }
+  button { font:inherit; cursor:pointer; }
+  .btn { border:0; border-radius:12px; padding:10px 14px; background:var(--brand); color:#fff; font-weight:600; }
+  .btn.ghost { background:var(--brand2); color:var(--brand); }
+  .btn.ok { background:var(--ok); } .btn.bad { background:var(--bad); } .btn.warn { background:var(--warn); }
+  .btn.sm { padding:6px 10px; font-size:14px; border-radius:10px; }
+  .btn:disabled { opacity:.45; }
+  .tabs { display:flex; gap:6px; margin-bottom:14px; overflow-x:auto; }
+  .tabs button { border:1px solid var(--line); background:#fff; border-radius:999px; padding:7px 14px; white-space:nowrap; }
+  .tabs button.on { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .ar { font-family:"Noto Naskh Arabic", "Geeza Pro", "Arabic Typesetting", serif; direction:rtl; }
+  .big { font-size:84px; line-height:1.4; text-align:center; margin:6px 0; }
+  .mid { font-size:34px; line-height:1.4; }
+  .pill { display:inline-block; border-radius:999px; padding:2px 9px; font-size:12px; font-weight:600; background:#eef1f0; color:var(--muted); }
+  .pill.check{background:#fff4e0;color:var(--warn)} .pill.record{background:#e7effd;color:#2453a6}
+  .pill.submitted{background:#f1e8fb;color:#6a3aa5} .pill.done{background:#e3f4e8;color:var(--ok)} .pill.keep_phone{background:#eef1f0;color:#555}
+  .note { background:#fff4e0; border-left:4px solid var(--warn); padding:8px 10px; border-radius:8px; font-size:14px; margin:8px 0; }
+  .bar { height:8px; background:#e8eeec; border-radius:99px; overflow:hidden; margin-top:6px; }
+  .bar i { display:block; height:100%; background:var(--ok); }
+  .rec { width:96px; height:96px; border-radius:50%; border:0; background:var(--bad); color:#fff; font-size:15px; font-weight:700; }
+  .rec.on { animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { box-shadow:0 0 0 14px rgba(179,38,30,.15); } }
+  .center { text-align:center; }
+  .stats { display:flex; gap:8px; } .stats div { flex:1; background:var(--brand2); border-radius:12px; padding:8px; text-align:center; }
+  .stats b { display:block; font-size:22px; color:var(--brand); }
+  .item { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; align-items:center; border-top:1px solid var(--line); padding:10px 0; }
+  .item:first-child { border-top:0; }
+  .toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:#1d2a27; color:#fff; padding:10px 16px; border-radius:12px; font-size:14px; z-index:9; display:none; max-width:90vw; }
+  .hide { display:none !important; }
+</style>
+</head>
+<body>
+<header><h1>Qaida Voices</h1><span id="who" class="small"></span><button id="out" class="hide">Log out</button></header>
+<main id="app"></main>
+<div class="toast" id="toast"></div>
+
+<script>
+const API = 'https://pgnxustlusrzqpfsjeuz.supabase.co/rest/v1/rpc/';
+const KEY = 'sb_publishable_Gum2f2al8VOqWdvg5-fM6w__OOqD1J8';
+const PAY_PER_ITEM = 0.30;          // $3 per 10 approved items
+const MAX_SECONDS = 4;
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const app = $('#app');
+const store = { get(k){ try { return JSON.parse(localStorage.getItem('qv_'+k)); } catch { return null; } },
+                set(k,v){ try { v==null ? localStorage.removeItem('qv_'+k) : localStorage.setItem('qv_'+k, JSON.stringify(v)); } catch {} } };
+let S = store.get('session');      // {token, role, name}
+
+function toast(msg, ms=2200){ const t=$('#toast'); t.textContent=msg; t.style.display='block'; clearTimeout(toast.h); toast.h=setTimeout(()=>t.style.display='none', ms); }
+
+async function rpc(fn, args={}){
+  const body = fn==='login' ? args : { p_token: S && S.token, ...args };
+  let r;
+  try { r = await fetch(API+fn, { method:'POST', headers:{ apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json' }, body:JSON.stringify(body) }); }
+  catch { toast('No internet connection. Try again.'); throw new Error('offline'); }
+  const data = await r.json().catch(()=>null);
+  if(!r.ok){
+    const m = (data && data.message) || '';
+    if(m.includes('not_logged_in')){ logout(); toast('Please log in again.'); }
+    else toast('Something went wrong: '+(m||r.status));
+    throw new Error(m||r.status);
+  }
+  return data;
+}
+
+function logout(){ S=null; store.set('session', null); render(); }
+$('#out').onclick = logout;
+
+function render(){
+  $('#who').textContent = S ? S.name : '';
+  $('#out').classList.toggle('hide', !S);
+  if(!S) return loginView();
+  if(S.role==='admin') return adminView(store.get('tab') || 'check');
+  return recorderHome();
+}
+
+/* ================= login ================= */
+function loginView(){
+  app.innerHTML = `<div class="card">
+    <h2>Log in</h2>
+    <p class="muted">Use the name and PIN you were given.</p>
+    <p><input id="n" placeholder="Your name" autocomplete="username"></p>
+    <p><input id="p" placeholder="PIN" inputmode="numeric" type="password" autocomplete="current-password"></p>
+    <button class="btn" id="go" style="width:100%">Log in</button></div>`;
+  const go = async () => {
+    $('#go').disabled = true;
+    try { const r = await rpc('login', { p_name:$('#n').value, p_pin:$('#p').value });
+      if(!r.ok){ toast('Name or PIN is not right.'); return; }
+      S = { token:r.token, role:r.role, name:r.name }; store.set('session', S); render();
+    } finally { const b=$('#go'); if(b) b.disabled=false; }
+  };
+  $('#go').onclick = go; $('#p').onkeydown = e => { if(e.key==='Enter') go(); };
+}
+
+/* ================= recorder ================= */
+async function recorderHome(){
+  app.innerHTML = '<p class="muted">Loading…</p>';
+  const [lessons, st] = await Promise.all([rpc('my_lessons'), rpc('my_stats')]);
+  app.innerHTML = `
+    <div class="card"><div class="stats">
+      <div><b>${st.approved}</b><span class="small">approved</span></div>
+      <div><b>${st.waiting}</b><span class="small">waiting for review</span></div>
+      <div><b>$${(st.unpaid*PAY_PER_ITEM).toFixed(2)}</b><span class="small">to be paid</span></div></div></div>
+    <h2>Your lessons</h2>
+    ${lessons.length ? '' : '<div class="card muted">No lessons for you yet. You will see them here once they are ready.</div>'}
+    ${lessons.map(l => `<div class="card">
+      <div class="row"><div class="grow"><b>${esc(l.lesson)}</b>
+        <div class="muted small">${l.to_record} to record${l.returned? ` · <b style="color:var(--warn)">${l.returned} sent back</b>`:''} · ${l.waiting} waiting · ${l.done} approved</div></div>
+        <button class="btn sm" data-l="${esc(l.lesson)}" ${l.to_record? '':'disabled'}>${l.to_record? 'Record':'Done'}</button></div>
+      <div class="bar"><i style="width:${Math.round(100*l.done/Math.max(1,l.total))}%"></i></div></div>`).join('')}
+    <div class="card small muted"><b>Tips:</b> quiet room, phone 20 cm from your mouth. Say each sound once, clearly, the Qaida way.
+      Single sounds like <span class="ar">بَ</span> are said as the sound ("ba"), not the letter name.</div>`;
+  app.querySelectorAll('[data-l]').forEach(b => b.onclick = () => recordLesson(b.dataset.l));
+}
+
+let mediaStream = null;
+async function getMic(){
+  if(mediaStream && mediaStream.active) return mediaStream;
+  mediaStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, channelCount:1 } });
+  return mediaStream;
+}
+
+async function recordLesson(lesson){
+  let items = await rpc('my_items', { p_lesson:lesson }), idx = 0, blob = null, mime = '', url = null;
+  const show = () => {
+    if(idx >= items.length){
+      app.innerHTML = `<div class="card center"><h2>Lesson finished 🎉</h2><p class="muted">Your recordings are waiting for review.</p>
+        <button class="btn" id="back">Back to lessons</button></div>`;
+      $('#back').onclick = recorderHome; return;
+    }
+    const it = items[idx]; blob = null; if(url){ URL.revokeObjectURL(url); url=null; }
+    app.innerHTML = `
+      <div class="row" style="margin-bottom:10px"><button class="btn ghost sm" id="back">‹ Lessons</button>
+        <div class="grow muted small" style="text-align:right">${esc(lesson)} · ${idx+1} of ${items.length}</div></div>
+      <div class="card">
+        ${it.note ? `<div class="note"><b>Sent back:</b> ${esc(it.note)}</div>` : ''}
+        <div class="big ar">${esc(it.arabic)}</div>
+        <div class="center muted">${esc(it.hint||'')}</div>
+        <div class="center" style="margin:18px 0 8px"><button class="rec" id="rec">Record</button></div>
+        <div class="center muted small" id="status">Tap Record, say it once, tap again to stop.</div>
+        <div class="row" style="justify-content:center;margin-top:14px">
+          <button class="btn ghost" id="play" disabled>▶ Listen</button>
+          <button class="btn ok" id="send" disabled>Submit ✓</button></div>
+      </div>
+      <div class="row" style="justify-content:space-between">
+        <button class="btn ghost sm" id="skip">Skip for now</button>
+        <button class="btn ghost sm" id="flag">Text looks wrong?</button></div>`;
+    $('#back').onclick = recorderHome;
+    $('#skip').onclick = () => { idx++; show(); };
+    $('#flag').onclick = async () => {
+      const n = prompt('What looks wrong with this text? (optional)');
+      if(n === null) return;
+      await rpc('flag_text', { p_item:it.id, p_note:n }); toast('Thanks — sent to the admin to check.');
+      items.splice(idx,1); show();
+    };
+    let rec = null, timer = null;
+    $('#rec').onclick = async () => {
+      if(rec && rec.state === 'recording'){ rec.stop(); return; }
+      let stream; try { stream = await getMic(); } catch { toast('Please allow the microphone for this page.', 4000); return; }
+      const chunks = []; rec = new MediaRecorder(stream);
+      rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+      rec.onstop = () => {
+        clearTimeout(timer); $('#rec').classList.remove('on'); $('#rec').textContent = 'Again';
+        mime = rec.mimeType || 'audio/webm'; blob = new Blob(chunks, { type:mime });
+        if(url) URL.revokeObjectURL(url); url = URL.createObjectURL(blob);
+        $('#play').disabled = false; $('#send').disabled = false;
+        $('#status').textContent = 'Listen back. If it is clear, submit. If not, record again.';
+        new Audio(url).play().catch(()=>{});
+      };
+      rec.start(); $('#rec').classList.add('on'); $('#rec').textContent = 'Stop';
+      $('#status').textContent = 'Recording… (stops by itself after '+MAX_SECONDS+' seconds)';
+      $('#play').disabled = true; $('#send').disabled = true;
+      timer = setTimeout(() => rec.state==='recording' && rec.stop(), MAX_SECONDS*1000);
+    };
+    $('#play').onclick = () => url && new Audio(url).play();
+    $('#send').onclick = async () => {
+      if(!blob) return; $('#send').disabled = true;
+      const b64 = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result.split(',')[1]); fr.readAsDataURL(blob); });
+      try { const r = await rpc('submit_take', { p_item:it.id, p_audio:b64, p_mime:mime });
+        if(!r.ok){ toast(r.error==='too_long' ? 'Too long — please keep it short.' : 'This item is no longer yours to record.'); $('#send').disabled=false; return; }
+        toast('Saved ✓', 1200); items.splice(idx,1); show();
+      } catch { $('#send').disabled = false; }
+    };
+  };
+  show();
+}
+
+/* ================= admin ================= */
+const TABS = { check:'Check text', review:'Review', people:'Recorders & pay', download:'Download' };
+function adminView(tab){
+  store.set('tab', tab);
+  app.innerHTML = `<div class="tabs">${Object.entries(TABS).map(([k,v]) => `<button data-t="${k}" class="${k===tab?'on':''}">${v}</button>`).join('')}</div><div id="pane"><p class="muted">Loading…</p></div>`;
+  app.querySelectorAll('[data-t]').forEach(b => b.onclick = () => adminView(b.dataset.t));
+  ({ check:adminLessons, review:adminReview, people:adminPeople, download:adminDownload })[tab]();
+}
+const STATUS = { check:'to check', record:'to record', submitted:'waiting review', done:'approved', keep_phone:'phone voice' };
+
+function sayPhone(text){
+  if(!('speechSynthesis' in window)) return toast('This browser has no voice.');
+  speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ar-SA'; u.rate = .8;
+  const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.startsWith('ar')); if(v) u.voice = v;
+  speechSynthesis.speak(u);
+}
+
+async function adminLessons(){
+  const [lessons, people] = await Promise.all([rpc('adm_lessons'), rpc('adm_people')]);
+  const recs = people.filter(p => p.role==='recorder' && p.active);
+  $('#pane').innerHTML = `<p class="muted small">Step 1: open each lesson and check the Arabic text. Step 2: give the lesson to a recorder. Recorders only see items marked "to record".</p>` +
+    lessons.map(l => `<div class="card">
+      <div class="row"><div class="grow"><b>${esc(l.lesson)}</b>
+        <div class="muted small">${l.total} items · ${l.to_check} to check · ${l.to_record} to record · ${l.waiting} waiting · ${l.done} approved${l.keep_phone? ' · '+l.keep_phone+' phone voice':''}</div></div>
+        <button class="btn sm ghost" data-open="${esc(l.lesson)}">Open</button></div>
+      <div class="row" style="margin-top:8px"><span class="small muted">Recorder:</span>
+        <select class="grow" data-assign="${esc(l.lesson)}" style="padding:6px 8px">
+          <option value="">— nobody yet —</option>
+          ${recs.map(p => `<option value="${p.id}" ${p.id===l.recorder_id?'selected':''}>${esc(p.name)}</option>`).join('')}
+        </select></div>
+      <div class="bar"><i style="width:${Math.round(100*(l.done+l.keep_phone)/Math.max(1,l.total))}%"></i></div></div>`).join('');
+  $('#pane').querySelectorAll('[data-open]').forEach(b => b.onclick = () => adminLesson(b.dataset.open));
+  $('#pane').querySelectorAll('[data-assign]').forEach(s => s.onchange = async () => {
+    await rpc('adm_assign', { p_lesson:s.dataset.assign, p_recorder:s.value || null }); toast('Saved ✓', 1200);
+  });
+}
+
+async function adminLesson(lesson){
+  const items = await rpc('adm_items', { p_lesson:lesson });
+  const n = items.filter(i => i.status==='check').length;
+  $('#pane').innerHTML = `
+    <div class="row" style="margin-bottom:10px"><button class="btn ghost sm" id="back">‹ All lessons</button><b class="grow">${esc(lesson)}</b></div>
+    <div class="card small">Tap 🔊 to hear the phone voice. Mark each item, or if all the text is right, send the whole lesson at once.
+      <div style="margin-top:8px"><button class="btn sm" id="all" ${n?'':'disabled'}>All text OK — send ${n} item${n===1?'':'s'} to recording</button></div></div>
+    <div class="card" id="list">${items.map(row).join('')}</div>`;
+  $('#back').onclick = () => adminView('check');
+  $('#all').onclick = async () => { const r = await rpc('adm_lesson_ok', { p_lesson:lesson }); toast(r.n+' items sent to recording'); adminLesson(lesson); };
+  function row(i){
+    const locked = i.status==='submitted' || i.status==='done';
+    return `<div class="item" id="it-${esc(i.id)}">
+      <div class="mid ar" style="min-width:90px;text-align:center">${esc(i.arabic)}</div>
+      <div><div class="row"><span class="pill ${i.status}">${STATUS[i.status]}</span><span class="small muted grow">${esc(i.hint||'')} · <code>${esc(i.id)}</code></span></div>
+        ${i.original? `<div class="small muted">was: <span class="ar">${esc(i.original)}</span></div>`:''}
+        ${i.note? `<div class="note">${esc(i.note)}</div>`:''}
+        <div class="row" style="margin-top:6px">
+          <button class="btn ghost sm" data-say="${esc(i.arabic)}">🔊</button>
+          ${locked ? '' : `
+          <button class="btn sm" data-act="record" data-id="${esc(i.id)}">Needs a person</button>
+          <button class="btn ghost sm" data-act="keep_phone" data-id="${esc(i.id)}">Keep phone voice</button>
+          <button class="btn ghost sm" data-fix="${esc(i.id)}">Fix text</button>`}
+        </div>
+        <div class="row hide" data-fixbox="${esc(i.id)}" style="margin-top:6px">
+          <input class="ar grow" style="font-size:22px" value="${esc(i.arabic)}"><button class="btn sm ok" data-savefix="${esc(i.id)}">Save → record</button></div>
+      </div></div>`;
+  }
+  const list = $('#list');
+  list.onclick = async e => {
+    const b = e.target.closest('button'); if(!b) return;
+    if(b.dataset.say) return sayPhone(b.dataset.say);
+    if(b.dataset.fix){ list.querySelector(`[data-fixbox="${b.dataset.fix}"]`).classList.toggle('hide'); return; }
+    const id = b.dataset.id || b.dataset.savefix; if(!id) return;
+    const act = b.dataset.act || 'record';
+    const arabic = b.dataset.savefix ? list.querySelector(`[data-fixbox="${id}"] input`).value : null;
+    b.disabled = true;
+    await rpc('adm_set_item', { p_item:id, p_action:act, p_arabic:arabic });
+    const fresh = (await rpc('adm_items', { p_lesson:lesson })).find(x => x.id===id);
+    $('#it-'+CSS.escape(id)).outerHTML = row(fresh);
+    const left = list.querySelectorAll('.pill.check').length;
+    $('#all').disabled = !left; $('#all').textContent = `All text OK — send ${left} item${left===1?'':'s'} to recording`;
+  };
+}
+
+async function adminReview(){
+  const q = await rpc('adm_queue');
+  if(!q.length){ $('#pane').innerHTML = '<div class="card muted">Nothing waiting for review. 👍</div>'; return; }
+  let i = 0, audio = null;
+  const show = async () => {
+    if(i >= q.length){ $('#pane').innerHTML = '<div class="card center"><h2>All reviewed ✓</h2><button class="btn" id="re">Check again</button></div>'; $('#re').onclick = adminReview; return; }
+    const t = q[i];
+    $('#pane').innerHTML = `<div class="muted small" style="margin-bottom:8px">${i+1} of ${q.length} waiting · ${esc(t.lesson)} · by <b>${esc(t.recorder)}</b></div>
+      <div class="card"><div class="big ar">${esc(t.arabic)}</div><div class="center muted">${esc(t.hint||'')} · <code>${esc(t.item)}</code></div>
+        <div class="row" style="justify-content:center;margin:14px 0"><button class="btn" id="play">▶ Play</button><button class="btn ghost" id="phone">🔊 Phone voice</button></div>
+        <input id="note" placeholder="Note if returning (e.g. too quiet, wrong vowel)">
+        <div class="row" style="margin-top:10px"><button class="btn bad grow" id="no">Return</button><button class="btn ok grow" id="yes">Approve ✓</button></div></div>
+      <button class="btn ghost sm" id="skip">Skip</button>`;
+    const a = await rpc('adm_audio', { p_take:t.take });
+    if(audio) URL.revokeObjectURL(audio.src);
+    audio = new Audio(URL.createObjectURL(b64ToBlob(a.audio, a.mime)));
+    audio.play().catch(()=>{});
+    $('#play').onclick = () => { audio.currentTime = 0; audio.play(); };
+    $('#phone').onclick = () => sayPhone(t.arabic);
+    $('#skip').onclick = () => { i++; show(); };
+    const decide = async ok => {
+      if(!ok && !$('#note').value.trim()){ $('#note').focus(); toast('Add a short note so the recorder knows what to fix.'); return; }
+      $('#yes').disabled = $('#no').disabled = true;
+      await rpc('adm_review', { p_take:t.take, p_ok:ok, p_note:$('#note').value }); i++; show();
+    };
+    $('#yes').onclick = () => decide(true); $('#no').onclick = () => decide(false);
+  };
+  show();
+}
+function b64ToBlob(b64, type){ const s = atob(b64), u = new Uint8Array(s.length); for(let i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return new Blob([u], { type }); }
+
+async function adminPeople(){
+  const people = (await rpc('adm_people')).filter(p => p.role==='recorder');
+  $('#pane').innerHTML = `
+    <div class="card"><h2>Add a recorder</h2>
+      <div class="row"><input id="nn" class="grow" placeholder="Name (they log in with it)"><input id="np" style="width:130px" placeholder="PIN 4–8 digits" inputmode="numeric"></div>
+      <button class="btn" id="add" style="margin-top:8px">Add</button>
+      <p class="muted small">Send them the link, their name and PIN. To change a PIN, add the same name again with a new PIN.</p></div>
+    ${people.map(p => `<div class="card"><div class="row"><div class="grow"><b>${esc(p.name)}</b> ${p.active?'':'<span class="pill">stopped</span>'}
+        <div class="muted small">${p.approved} approved · ${p.waiting} waiting · unpaid ${p.unpaid} = <b>$${(p.unpaid*PAY_PER_ITEM).toFixed(2)}</b></div></div>
+        <button class="btn sm ok" data-paid="${p.id}" data-name="${esc(p.name)}" data-amt="${(p.unpaid*PAY_PER_ITEM).toFixed(2)}" ${p.unpaid?'':'disabled'}>Mark paid</button>
+        <button class="btn sm ghost" data-stop="${esc(p.name)}" data-active="${p.active}">${p.active?'Stop':'Restart'}</button></div></div>`).join('')}`;
+  $('#add').onclick = async () => {
+    const r = await rpc('adm_save_person', { p_name:$('#nn').value, p_pin:$('#np').value.trim(), p_active:true });
+    if(!r.ok) return toast(r.error==='pin' ? 'PIN must be 4–8 digits.' : 'Please type a name.');
+    toast('Saved ✓'); adminPeople();
+  };
+  $('#pane').querySelectorAll('[data-paid]').forEach(b => b.onclick = async () => {
+    if(!confirm(`Mark $${b.dataset.amt} as paid to ${b.dataset.name}?`)) return;
+    await rpc('adm_mark_paid', { p_recorder:b.dataset.paid }); adminPeople();
+  });
+  $('#pane').querySelectorAll('[data-stop]').forEach(b => b.onclick = async () => {
+    await rpc('adm_save_person', { p_name:b.dataset.stop, p_pin:null, p_active:b.dataset.active!=='true' }); adminPeople();
+  });
+}
+
+/* ---------- download: approved recordings as Garaad-ready mp3 files ---------- */
+function loadScript(src){ return new Promise((res, rej) => { const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
+
+async function adminDownload(){
+  const list = await rpc('adm_export_list');
+  $('#pane').innerHTML = `<div class="card"><h2>Download for Garaad</h2>
+    <p>${list.approved.length} approved recordings · ${list.keep_phone.length} items keep the phone voice · ${list.corrections.length} text corrections.</p>
+    <p class="muted small">Each file is turned into mp3, silence trimmed, and given a slight pitch change so it doesn't sound exactly like the recorder.
+      File names match Garaad (e.g. <code>fatha-b.mp3</code>), so you can upload them straight into <code>audio/ar/</code>.</p>
+    <label class="row small"><span>Pitch change:</span><select id="pitch" style="width:auto"><option value="1">none</option><option value="1.03" selected>slight (+½ step)</option><option value="1.06">more (+1 step)</option></select></label>
+    <button class="btn" id="go" style="margin-top:10px" ${list.approved.length||list.corrections.length?'':'disabled'}>Make zip</button>
+    <div id="prog" class="muted small" style="margin-top:8px"></div></div>`;
+  $('#go').onclick = async () => {
+    $('#go').disabled = true; const prog = $('#prog');
+    try {
+      prog.textContent = 'Loading tools…';
+      await loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+      await loadScript('https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js');
+      const zip = new JSZip(), rate = +$('#pitch').value, ctx = new (window.AudioContext||window.webkitAudioContext)();
+      let n = 0, failed = [];
+      for(const a of list.approved){
+        prog.textContent = `Preparing ${++n} of ${list.approved.length}…`;
+        try {
+          const r = await rpc('adm_audio', { p_take:a.take });
+          const buf = await ctx.decodeAudioData(await b64ToBlob(r.audio, r.mime).arrayBuffer());
+          zip.file(a.item + '.mp3', await toMp3(buf, rate));
+        } catch(e) { failed.push(a.item); }
+      }
+      if(list.keep_phone.length) zip.file('keep-phone-voice.txt', 'These items keep the phone voice (no recording):\n' + list.keep_phone.join('\n') + '\n');
+      if(list.corrections.length) zip.file('text-corrections.csv', '﻿item,old text,new text\n' + list.corrections.map(c => [c.item, c.from, c.to].map(x => '"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n') + '\n');
+      if(failed.length) zip.file('could-not-convert.txt', failed.join('\n') + '\n');
+      prog.textContent = 'Zipping…';
+      const blob = await zip.generateAsync({ type:'blob' });
+      const link = document.createElement('a'); link.href = URL.createObjectURL(blob);
+      link.download = 'qaida-voices-' + new Date().toISOString().slice(0,10) + '.zip'; link.click();
+      prog.textContent = `Done ✓ ${list.approved.length - failed.length} files` + (failed.length ? ` · ${failed.length} could not be converted (listed in the zip)` : '');
+    } catch(e) { prog.textContent = 'Could not make the zip: ' + e.message; }
+    $('#go').disabled = false;
+  };
+}
+
+// mono, trimmed, pitch-shifted (by playing slightly faster), 22.05 kHz, 64 kbps mp3
+async function toMp3(buf, rate){
+  const data = buf.getChannelData(0), thr = 0.02, pad = Math.round(buf.sampleRate * 0.08);
+  let s = 0, e = data.length - 1;
+  while(s < e && Math.abs(data[s]) < thr) s++;
+  while(e > s && Math.abs(data[e]) < thr) e--;
+  s = Math.max(0, s - pad); e = Math.min(data.length - 1, e + pad);
+  const out = 22050, len = Math.ceil((e - s) / buf.sampleRate / rate * out);
+  const off = new OfflineAudioContext(1, Math.max(len, 1), out);
+  const src = off.createBufferSource(), trimmed = off.createBuffer(1, e - s + 1, buf.sampleRate);
+  trimmed.copyToChannel(data.slice(s, e + 1), 0);
+  src.buffer = trimmed; src.playbackRate.value = rate; src.connect(off.destination); src.start();
+  const res = (await off.startRendering()).getChannelData(0);
+  let peak = 0; for(const v of res) peak = Math.max(peak, Math.abs(v));
+  const gain = peak > 0 ? Math.min(0.9 / peak, 4) : 1;               // even out loudness
+  const pcm = new Int16Array(res.length); for(let i=0;i<res.length;i++) pcm[i] = Math.max(-1, Math.min(1, res[i]*gain)) * 32767;
+  const enc = new lamejs.Mp3Encoder(1, out, 64), parts = [];
+  for(let i=0;i<pcm.length;i+=1152){ const b = enc.encodeBuffer(pcm.subarray(i, i+1152)); if(b.length) parts.push(b); }
+  const f = enc.flush(); if(f.length) parts.push(f);
+  return new Blob(parts, { type:'audio/mpeg' });
+}
+
+render();
+</script>
+</body>
+</html>
